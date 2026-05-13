@@ -1,46 +1,10 @@
 import math
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
 from matplotlib.patches import FancyBboxPatch, Circle
 from tequila.objective.objective import Variable, FixedVariable
 
 _FONT = "DejaVu Sans"
-
-
-def _param_label(gate):
-    p = gate.parameter
-    if isinstance(p, (Variable, FixedVariable)):
-        return str(p)
-    return "f({})".format(gate.extract_variables())
-
-
-def _gate_label(gate):
-    if gate.is_parameterized():
-        return f"{gate.name}({gate.parameter})"
-    return gate.name
-
-
-def _assign_columns(gates):
-    """Assign each gate to the earliest column where none of its qubits are occupied."""
-    col_occupied = []  # col_occupied[col] = set of qubits used in that column
-    columns = []
-    for gate in gates:
-        qubits = set(gate.target) | set(gate.control)
-        placed = False
-        for col, used in enumerate(col_occupied):
-            if not qubits & used:
-                used |= qubits
-                columns.append(col)
-                placed = True
-                break
-        if not placed:
-            col_occupied.append(set(qubits))
-            columns.append(len(col_occupied) - 1)
-    return columns, len(col_occupied)
-
-
 _LOGIC_GATES = {"X", "Y", "Z", "H", "Phase"}
-
 _DEFAULT_STYLE = {
     "logic": "white",
     "pauli": "#3C2673",
@@ -68,8 +32,76 @@ _FAI_STYLE = {
     "parametrized_label": "black",
 }
 
-_KNOWN_STYLES = {"default": _DEFAULT_STYLE, "fai": _FAI_STYLE, "unia": _UNIA_STYLE}
+_TORONTO_STYLE = {
+    "logic": "#007FA3",
+    "pauli": "#1E3765",
+    "parametrized": "#6D247A",
+    "logic_label": "black",
+    "pauli_label": "#F2F4F7",
+    "parametrized_label": "#F2F4F7",
+}
 
+_TEQUILA_STYLE = {
+    "logic": "white",
+    "pauli": "#08293D",
+    "parametrized": "#FC24C1",
+    "logic_label": "black",
+    "pauli_label": "white",
+    "parametrized_label": "black",
+}
+
+_KNOWN_STYLES = {"default": _DEFAULT_STYLE, "fai": _FAI_STYLE, "unia": _UNIA_STYLE, "toronto": _TORONTO_STYLE, "tequila": _TEQUILA_STYLE}
+
+
+def _param_label(gate):
+    p = gate.parameter
+    if isinstance(p, (Variable, FixedVariable)):
+        return str(p)
+    return "f({})".format(gate.extract_variables())
+
+
+def _gate_label(gate):
+    if gate.is_parameterized():
+        return f"{gate.name}({gate.parameter})"
+    return gate.name
+
+
+def _spans_through(gate_qubits, other_qubits):
+    """Return True if any qubit in gate_qubits falls strictly inside the span of other_qubits."""
+    if len(other_qubits) < 2:
+        return False
+    lo, hi = min(other_qubits), max(other_qubits)
+    return any(lo < q < hi for q in gate_qubits)
+
+
+def _assign_columns(gates):
+    """Assign each gate to the earliest column where none of its qubits are occupied.
+
+    Returns (columns, n_cols, offsets) where offsets[i] is a small x-shift to
+    apply when gate i would otherwise sit on another gate's connecting line.
+    """
+    col_occupied = []   # col_occupied[col] = set of qubits used in that column
+    col_gate_qubits = []  # col_gate_qubits[col] = list of qubit-sets already placed there
+    columns = []
+    offsets = []
+    for gate in gates:
+        qubits = set(gate.target) | set(gate.control)
+        placed = False
+        for col, used in enumerate(col_occupied):
+            if not qubits & used:
+                on_line = any(_spans_through(qubits, oq) for oq in col_gate_qubits[col])
+                used |= qubits
+                col_gate_qubits[col].append(qubits)
+                columns.append(col)
+                offsets.append(0.38 if on_line else 0.0)
+                placed = True
+                break
+        if not placed:
+            col_occupied.append(set(qubits))
+            col_gate_qubits.append([qubits])
+            columns.append(len(col_occupied) - 1)
+            offsets.append(0.0)
+    return columns, len(col_occupied), offsets
 
 def _resolve_style(style):
     if hasattr(style, "lower"):
@@ -127,12 +159,12 @@ def _draw_exp_pauli(ax, gate, x, qy, style=None, show_variables=True):
                 ha="left", va="bottom", fontfamily=_FONT, fontsize=8, color="#444444", zorder=4)
 
 
-def show(circuit, filename=None, show_variables=True, style=None):
+def to_matplotlib(circuit, filename=None, show_variables=True, style=None):
     n_qubits = circuit.n_qubits
     gates = circuit.gates
 
     style = _resolve_style(style)
-    gate_cols, n_cols = _assign_columns(gates)
+    gate_cols, n_cols, gate_offsets = _assign_columns(gates)
 
     col_spacing = 1.6
     left_margin = 0.8
@@ -158,8 +190,8 @@ def show(circuit, filename=None, show_variables=True, style=None):
         ax.text(-0.05, y, f"q{q}", ha="right", va="center", fontfamily=_FONT, fontsize=11)
 
     # Draw gates
-    for gate, col in zip(gates, gate_cols):
-        x = cx(col)
+    for gate, col, x_off in zip(gates, gate_cols, gate_offsets):
+        x = cx(col) + x_off
         targets = gate.target
         controls = gate.control
         name = gate.name
@@ -220,7 +252,11 @@ def show(circuit, filename=None, show_variables=True, style=None):
     ax.set_ylim(-0.8, n_qubits - 0.2)
 
     plt.tight_layout()
+
     if filename:
         plt.savefig(filename, dpi=150, bbox_inches="tight")
     else:
         plt.show()
+
+def show(*args, **kwargs):
+    to_matplotlib(*args, **kwargs)
