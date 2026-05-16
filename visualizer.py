@@ -1,7 +1,11 @@
 import math
 import matplotlib.pyplot as plt
+import matplotlib.patheffects as pe
 from matplotlib.patches import FancyBboxPatch, Circle
 from tequila.objective.objective import Variable, FixedVariable
+
+def _shadow():
+    return [pe.withSimplePatchShadow(offset=(2, -2), shadow_rgbFace=(0, 0, 0), alpha=0.18), pe.Normal()]
 
 _FONT = "DejaVu Sans"
 _LOGIC_GATES = {"X", "Y", "Z", "H", "Phase"}
@@ -55,9 +59,12 @@ _KNOWN_STYLES = {"default": _DEFAULT_STYLE, "fai": _FAI_STYLE, "unia": _UNIA_STY
 
 def _param_label(gate):
     p = gate.parameter
-    if isinstance(p, (Variable, FixedVariable)):
+    if isinstance(p,Variable):
         return str(p)
-    return "f({})".format(gate.extract_variables())
+    elif isinstance(p, FixedVariable):
+        return "{:2.4f}".format(p)
+    else:
+        return "f({})".format(gate.extract_variables())
 
 
 def _gate_label(gate):
@@ -115,7 +122,9 @@ def _draw_exp_pauli(ax, gate, x, qy, style=None, show_variables=True):
     r = 0.28
     for q, pauli in pauli_items:
         y = qy(q)
-        ax.add_patch(Circle((x, y), r, facecolor=color, edgecolor="black", lw=1.5, zorder=3))
+        patch = Circle((x, y), r, facecolor=color, edgecolor="black", lw=1.5, zorder=3)
+        patch.set_path_effects(_shadow())
+        ax.add_patch(patch)
         ax.text(x, y, pauli.lower(), ha="center", va="center", fontfamily=_FONT, fontsize=10, color=lcolor, zorder=4)
 
     # Parameter label above the topmost qubit
@@ -154,7 +163,7 @@ def to_matplotlib(circuit, filename=None, show_variables=True, style=None):
     for q in range(n_qubits):
         y = qy(q)
         ax.plot([0, total_width], [y, y], color="black", lw=1.5, zorder=1)
-        ax.text(-0.05, y, f"q{q}", ha="right", va="center", fontfamily=_FONT, fontsize=11)
+        ax.text(-0.05, y, f"$q_{q}$", ha="right", va="center", fontfamily=_FONT, fontsize=11)
 
     # Draw gates
     for gate, col, x_off in zip(gates, gate_cols, gate_offsets):
@@ -181,17 +190,17 @@ def to_matplotlib(circuit, filename=None, show_variables=True, style=None):
                 y = qy(t)
                 if name == "X" and controls:
                     # CNOT-style ⊕ target
-                    ax.add_patch(
-                        Circle((x, y), 0.28, facecolor="white", edgecolor="black", lw=1.5, zorder=3)
-                    )
+                    patch = Circle((x, y), 0.28, facecolor="white", edgecolor="black", lw=1.5, zorder=3)
+                    patch.set_path_effects(_shadow())
+                    ax.add_patch(patch)
                     ax.plot([x - 0.28, x + 0.28], [y, y], color="black", lw=1.5, zorder=4)
                     ax.plot([x, x], [y - 0.28, y + 0.28], color="black", lw=1.5, zorder=4)
                 elif name in ("Rx", "Ry", "Rz"):
                     axis = name[1].lower()
                     r = 0.28
-                    ax.add_patch(
-                        Circle((x, y), r, facecolor=color, edgecolor="black", lw=1.5, zorder=3)
-                    )
+                    patch = Circle((x, y), r, facecolor=color, edgecolor="black", lw=1.5, zorder=3)
+                    patch.set_path_effects(_shadow())
+                    ax.add_patch(patch)
                     ax.text(x, y, axis, ha="center", va="center", fontfamily=_FONT, fontsize=10, color=lcolor, zorder=4)
                     if show_variables and gate.is_parameterized():
                         d = (r + 0.12) / math.sqrt(2)
@@ -201,18 +210,18 @@ def to_matplotlib(circuit, filename=None, show_variables=True, style=None):
                     label = name if name in _LOGIC_GATES else _gate_label(gate)
                     box_w = max(0.55, len(label) * 0.115 + 0.15)
                     box_h = 0.5
-                    ax.add_patch(
-                        FancyBboxPatch(
-                            (x - box_w / 2, y - box_h / 2),
-                            box_w,
-                            box_h,
-                            boxstyle="round,pad=0.04",
-                            facecolor=color,
-                            edgecolor="black",
-                            lw=1.5,
-                            zorder=3,
-                        )
+                    patch = FancyBboxPatch(
+                        (x - box_w / 2, y - box_h / 2),
+                        box_w,
+                        box_h,
+                        boxstyle="round,pad=0.04",
+                        facecolor=color,
+                        edgecolor="black",
+                        lw=1.5,
+                        zorder=3,
                     )
+                    patch.set_path_effects(_shadow())
+                    ax.add_patch(patch)
                     ax.text(x, y, label, ha="center", va="center", fontfamily=_FONT, fontsize=9, color=lcolor, zorder=4)
 
     ax.set_xlim(-0.6, total_width + 0.2)
