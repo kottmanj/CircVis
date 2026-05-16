@@ -66,42 +66,9 @@ def _gate_label(gate):
     return gate.name
 
 
-def _spans_through(gate_qubits, other_qubits):
-    """Return True if any qubit in gate_qubits falls strictly inside the span of other_qubits."""
-    if len(other_qubits) < 2:
-        return False
-    lo, hi = min(other_qubits), max(other_qubits)
-    return any(lo < q < hi for q in gate_qubits)
-
-
 def _assign_columns(gates):
-    """Assign each gate to the earliest column where none of its qubits are occupied.
-
-    Returns (columns, n_cols, offsets) where offsets[i] is a small x-shift to
-    apply when gate i would otherwise sit on another gate's connecting line.
-    """
-    col_occupied = []   # col_occupied[col] = set of qubits used in that column
-    col_gate_qubits = []  # col_gate_qubits[col] = list of qubit-sets already placed there
-    columns = []
-    offsets = []
-    for gate in gates:
-        qubits = set(gate.target) | set(gate.control)
-        placed = False
-        for col, used in enumerate(col_occupied):
-            if not qubits & used:
-                on_line = any(_spans_through(qubits, oq) for oq in col_gate_qubits[col])
-                used |= qubits
-                col_gate_qubits[col].append(qubits)
-                columns.append(col)
-                offsets.append(0.38 if on_line else 0.0)
-                placed = True
-                break
-        if not placed:
-            col_occupied.append(set(qubits))
-            col_gate_qubits.append([qubits])
-            columns.append(len(col_occupied) - 1)
-            offsets.append(0.0)
-    return columns, len(col_occupied), offsets
+    n = len(gates)
+    return list(range(n)), n, [0.0] * n
 
 def _resolve_style(style):
     if hasattr(style, "lower"):
